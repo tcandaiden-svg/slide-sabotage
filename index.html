@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Slide Sabotage</title>
+<style>
+:root{--bg:#fff4e3;--fg:#24171a;--card:#fff;--ac:#ff5a3c;--ac2:#2b7bff;--mu:#7d6a66;--bd:#ecd6bd;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1315;--fg:#fbede4;--card:#2b1f22;--ac:#ff7a5c;--ac2:#6aa2ff;--mu:#b9a29a;--bd:#46343a}}
+:root[data-theme="dark"]{--bg:#1b1315;--fg:#fbede4;--card:#2b1f22;--ac:#ff7a5c;--ac2:#6aa2ff;--mu:#b9a29a;--bd:#46343a}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{max-width:520px;margin:0 auto;padding:16px}
+h1{font-size:28px;margin:8px 0}h2{font-size:20px;margin:12px 0 6px}
+.card{background:var(--card);border:2px solid var(--bd);border-radius:16px;padding:14px;margin:12px 0}
+.mu{color:var(--mu);font-size:14px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,input{font:inherit;border-radius:12px;border:2px solid var(--bd);padding:12px 14px;background:var(--card);color:var(--fg)}
+input{width:100%}button{cursor:pointer;font-weight:700}
+button.p{background:var(--ac);border-color:var(--ac);color:#fff}button.p:disabled{opacity:.4}
+button.s{background:var(--ac2);border-color:var(--ac2);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid img,.thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;border:3px solid transparent;display:block}
+.grid .on{border-color:var(--ac)}
+.slide{position:relative}.slide img{width:100%;max-height:55vh;object-fit:contain;border-radius:14px;background:#0003;display:block}
+.cap{position:absolute;left:0;right:0;bottom:0;background:#000b;color:#fff;padding:10px;text-align:center;font-weight:800;font-size:20px;border-radius:0 0 14px 14px}
+.theme{background:var(--ac);color:#fff;border-radius:14px;padding:10px 14px;font-weight:800;text-align:center}
+.votes{display:flex;gap:6px}.votes button{flex:1;font-size:22px;padding:14px 0}.votes .on{background:var(--ac2);color:#fff;border-color:var(--ac2)}
+.pill{display:inline-block;background:var(--bd);border-radius:99px;padding:2px 10px;font-size:13px;font-weight:700}
+.lb{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)}
+.big{font-size:44px;letter-spacing:6px;font-weight:900;text-align:center}
+</style></head><body><div id="app"><p class="mu">Loading…</p></div>
+<script>
+const app=document.getElementById('app');
+let S=null,P={},I={},PH={},sel=[],pickTitle=null,lastKey='',name='',code=null,ws,lastJoin=null,pid;
+try{pid=localStorage.getItem('ss_pid');if(!pid){pid=Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('ss_pid',pid)}}catch(e){pid=Math.random().toString(36).slice(2)}
+try{name=localStorage.getItem('ss_name')||''}catch(e){}
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const okImg=s=>typeof s==='string'&&s.startsWith('data:image/jpeg;base64,');
+const THEMES=['Why we should move to Mars','Our startup\'s big pivot','The case for a nap-based economy','Why our town needs a new mayor','The history of our friend group','Quarterly results: very bad','Introducing the world\'s best vacation spot','Why you should hire me'];
+const isHost=()=>S&&S.host===pid;
+const ph=(o,i)=>{const p=P[o],id=p&&p.photos&&p.photos[i];return okImg(PH[id])?PH[id]:''};
+const pn=u=>esc((P[u]&&P[u].name)||'Someone');
+const voters=()=>(S.order||[]).filter(x=>x!==S.presenter&&P[x]);
+const send=m=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify(m))};
+function connect(){
+  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
+  ws.onopen=()=>{if(lastJoin)send(lastJoin)};
+  ws.onmessage=e=>{const m=JSON.parse(e.data);
+    if(m.t==='ph'){PH[m.id]=m.data;lastKey='';draw()}
+    else if(m.t==='st'){code=m.code;lastJoin={t:'join',code,pid,name};S=m.S;P=m.P;I=m.I;draw()}
+    else if(m.t==='err'){lastJoin=null;code=null;home(m.msg)}};
+  ws.onclose=()=>setTimeout(connect,1000);
+}
+connect();home();
+function home(msg){
+  app.innerHTML=`<h1>📸 Slide Sabotage</h1><p class="mu">Present a slideshow you've never seen. Your friends picked the photos, the topic, and a caption to ruin your day.</p>
+  <div class="card"><h2>Your name</h2><input id="nm" maxlength="14" value="${esc(name)}" placeholder="e.g. John">
+  <div style="height:10px"></div><button class="p" data-a="create" style="width:100%">Create a room</button></div>
+  <div class="card"><h2>Join a room</h2><input id="cd" maxlength="4" placeholder="CODE" style="text-transform:uppercase">
+  <div style="height:10px"></div><button class="s" data-a="join" style="width:100%">Join</button>${msg?`<p class="mu">${esc(msg)}</p>`:''}</div>`;
+}
+const nm=()=>{name=(document.getElementById('nm').value||'').trim()||'Player';try{localStorage.setItem('ss_name',name)}catch(e){}return name};
+function shrink(file){return new Promise(res=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const s=Math.min(1,480/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.6))};im.src=fr.result};fr.readAsDataURL(file)})}
+
+/* ---------- views ---------- */
+function board(){const sc=(S&&S.scores)||{};const ids=Object.keys(P).sort((a,b)=>(sc[b]||0)-(sc[a]||0));
+  return ids.map(u=>`<div class="lb"><span>${pn(u)}${u===pid?' (you)':''}</span><b>${sc[u]||0}</b></div>`).join('')}
+function wait(t){return `<div class="card" style="text-align:center"><h2>${t}</h2><p class="mu">Hang tight…</p></div>`}
+function view(){
+  if(!S)return `<div class="card">Room not found.</div>`;
+  const r=S.round,me=pid,pool=[];
+  const head=`<div class="row" style="justify-content:space-between"><span class="pill">Room ${esc(code)}</span><span class="pill">${esc(name)}</span></div>`;
+  if(S.phase==='lobby'){
+    const mine=(P[me]&&P[me].photos)||[],ids=Object.keys(P),ready=ids.length>=3&&ids.every(u=>((P[u].photos)||[]).length>=2);
+    return head+`<h1>Lobby</h1><div class="card mu">Share this page with friends and have them enter code <b>${esc(code)}</b>. Everyone adds 2–3 photos (weird is good).</div>
+    <div class="card"><h2>Your photos (${mine.length}/3)</h2><div class="grid">${mine.map(p=>okImg(PH[p])?`<img src="${PH[p]}">`:'').join('')}</div>
+    <div style="height:10px"></div><button class="s" data-a="addph" ${mine.length>=3?'disabled':''}>＋ Add photo</button> <button data-a="clrph">Clear</button>
+    <input type="file" id="fi" accept="image/*" multiple hidden></div>
+    <div class="card"><h2>Players</h2>${ids.map(u=>`<div class="lb"><span>${pn(u)}${S.host===u?' 👑':''}</span><span class="mu">${(P[u].photos||[]).length} photos</span></div>`).join('')}</div>
+    ${isHost()?`<button class="p" data-a="start" style="width:100%" ${ready?'':'disabled'}>Start game</button><p class="mu">Needs 3+ players, each with 2+ photos.</p>`:'<p class="mu">Waiting for the host to start…</p>'}`;
+  }
+  const role=me===S.presenter?'🎤 Presenter':me===S.picker?'📸 Photo picker':me===S.themer?'🎯 Theme picker':me===S.titler?'✏️ Title writer':'';
+  const top=head+`<div class="row" style="justify-content:space-between"><b>Round ${r+1}/${S.order.length}</b><span class="mu">Presenter: ${pn(S.presenter)}</span></div>`;
+  if(S.phase==='setup'){
+    if(me===S.presenter)return top+wait('You\'re up! 🎤<br>Look away while your friends build your slideshow.');
+    let h='';
+    S.order.forEach(u=>{if(u!==S.presenter)(P[u]&&P[u].photos||[]).forEach((p,i)=>pool.push({o:u,i}))});
+    const N=Math.min(5,pool.length);
+    if(me===S.picker){
+      if(I['pick_'+r])h+=wait('Photos locked in ✅');
+      else h+=`<div class="card"><h2>📸 Pick ${N} photos (${sel.length}/${N})</h2><p class="mu">These are ${pn(S.presenter)}'s slides, in order. Make it hard.</p><div class="grid">${pool.map(x=>{const k=x.o+':'+x.i;return `<img data-a="tog" data-k="${k}" class="${sel.includes(k)?'on':''}" src="${ph(x.o,x.i)}">`}).join('')}</div><div style="height:10px"></div><button class="p" data-a="pick" data-n="${N}" ${sel.length===N?'':'disabled'} style="width:100%">Lock in</button></div>`}
+    if(me===S.themer){
+      if(I['theme_'+r])h+=wait('Theme locked in ✅');
+      else h+=`<div class="card"><h2>🎯 Pick a theme</h2><input id="tx" data-keep maxlength="60" placeholder="What must they pitch?"><div style="height:8px"></div><div class="row"><button data-a="rnd">🎲 Random</button><button class="p" data-a="theme">Lock in</button></div></div>`}
+    return top+`<div class="pill">${role}</div>`+(h||wait('Your friends are building the slideshow…'));
+  }
+  if(S.phase==='title'){
+    if(me===S.titler&&!I['title_'+r])return top+`<div class="pill">${role}</div><div class="card"><h2>✏️ Caption one slide</h2><p class="mu">Tap a slide, then write a title for it.</p><div class="grid">${S.slides.map((s,i)=>`<img data-a="tt" data-i="${i}" class="${pickTitle===i?'on':''}" src="${ph(s.o,s.i)}">`).join('')}</div><div style="height:10px"></div><input id="cp" data-keep maxlength="40" placeholder="e.g. Our Founder"><div style="height:8px"></div><button class="p" data-a="title" style="width:100%">Lock in</button></div>`;
+    return top+wait(me===S.presenter?'Almost ready… 🎤':'Waiting on the caption…');
+  }
+  if(S.phase==='present'){
+    const i=S.slideIdx,s=S.slides[i],vs=voters(),got=vs.filter(v=>I[`vote_${r}_${i}_${v}`]).length,adv=!!I[`adv_${r}_${i}`];
+    const cap=S.title&&S.title.slide===i?`<div class="cap">${esc(S.title.text)}</div>`:'';
+    let act='';
+    if(me===S.presenter)act=`<button class="p" data-a="adv" ${adv?'disabled':''} style="width:100%">${adv?'Waiting for votes…':'Done with this slide →'}</button>`;
+    else{const v=(I[`vote_${r}_${i}_${me}`]||{}).n;act=`<p class="mu" style="text-align:center">Rate the pitch</p><div class="votes">${[1,2,3,4,5].map(n=>`<button data-a="vote" data-n="${n}" class="${v===n?'on':''}">${n}</button>`).join('')}</div>`}
+    return top+`<div class="theme">${esc(S.theme)}</div><p class="mu" style="text-align:center">Slide ${i+1}/${S.slides.length} · votes ${got}/${vs.length}</p><div class="slide"><img src="${ph(s.o,s.i)}">${cap}</div><div style="height:12px"></div>${act}${isHost()&&adv?'<p class="mu" style="text-align:center"><a href="#" data-a="skip">Host: skip slow voters</a></p>':''}`;
+  }
+  if(S.phase==='fav'){
+    if(me!==S.presenter)return top+wait(`${pn(S.presenter)} is choosing a favorite contribution…`);
+    const b=(w,t,u)=>`<button data-a="fav" data-w="${w}" style="width:100%;margin-bottom:8px">${t} — ${pn(u)}</button>`;
+    return top+`<div class="card"><h2>Whose setup was best? (+10)</h2>${b('photo','📸 The photos',S.picker)}${b('theme','🎯 The theme',S.themer)}${b('title','✏️ The title',S.titler)}</div>`;
+  }
+  const done=S.phase==='end',g=(S.result&&S.result.gain)||{};
+  if(S.phase==='results'||done){
+    const gl=!done?`<div class="card"><h2>Round points</h2>${Object.keys(g).map(u=>`<div class="lb"><span>${pn(u)}</span><b>+${g[u]}</b></div>`).join('')}<p class="mu">Presenter earns the vote total. Favorite contribution +10. Best slide's photo owner +5 (and caption writer +5 if it was their slide).</p></div>`:'';
+    const btn=done?'<p class="mu">Create a new room to play again.</p>':isHost()?`<button class="p" data-a="next" style="width:100%">${r+1<S.order.length?'Next round':'Final scores'}</button>`:'';
+    const sc=S.scores||{},w=Object.keys(P).sort((a,b)=>(sc[b]||0)-(sc[a]||0))[0];
+    return head+(done?`<h1>🏆 ${pn(w)} wins!</h1>`:'<h1>Results</h1>')+gl+`<div class="card"><h2>Scoreboard</h2>${board()}</div>`+btn;
+  }
+  return '';
+}
+function draw(force){
+  if(!code)return;
+  const key=JSON.stringify([S&&[S.phase,S.round,S.slideIdx,S.scores],Object.keys(P).map(k=>k+(P[k].photos||[]).length+P[k].name),Object.keys(I).length,sel,pickTitle,force||0]);
+  if(key===lastKey&&!force)return;lastKey=key;
+  const keep={};app.querySelectorAll('[data-keep]').forEach(e=>keep[e.id]=e.value);
+  app.innerHTML=view();
+  for(const id in keep){const e=document.getElementById(id);if(e)e.value=keep[id]}
+}
+const acts={
+  create(){send({t:'create',pid,name:nm()})},
+  join(){const c=(document.getElementById('cd').value||'').trim().toUpperCase();send({t:'join',code:c,pid,name:nm()})},
+  addph(){document.getElementById('fi').click()},
+  clrph(){send({t:'clear'})},
+  start(){send({t:'start'})},
+  tog(d){const i=sel.indexOf(d.k);if(i>=0)sel.splice(i,1);else if(sel.length<5)sel.push(d.k);draw(1)},
+  pick(d){if(sel.length!==+d.n)return;send({t:'pick',slides:sel.map(k=>{const j=k.lastIndexOf(':');return{o:k.slice(0,j),i:+k.slice(j+1)}})});sel=[]},
+  rnd(){document.getElementById('tx').value=THEMES[Math.floor(Math.random()*THEMES.length)]},
+  theme(){const t=document.getElementById('tx').value.trim();if(t)send({t:'theme',text:t})},
+  tt(d){pickTitle=+d.i;draw(1)},
+  title(){const t=document.getElementById('cp').value.trim();if(t&&pickTitle!==null){send({t:'title',slide:pickTitle,text:t});pickTitle=null}},
+  vote(d){send({t:'vote',n:+d.n})},adv(){send({t:'adv'})},skip(){send({t:'skip'})},
+  fav(d){send({t:'fav',who:d.w})},next(){send({t:'next'})}
+};
+app.addEventListener('change',async e=>{if(e.target.id!=='fi')return;for(const f of e.target.files)send({t:'photo',data:await shrink(f)});e.target.value=''});
+app.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;e.preventDefault();const f=acts[b.dataset.a];if(f)f(b.dataset)});
+</script></body></html>
